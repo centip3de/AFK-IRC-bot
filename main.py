@@ -4,105 +4,103 @@ import os
 from smtplib import SMTP_SSL as SMTP
 from email.mime.text import MIMEText
 
-bot_owner = "centip3de"
-nickname = "centip3de_away"
-personNick = ""
-authorized = ['mShred', 'Kage', 'limdis', 'LoGiCaL__', 'fas', 'NightQuest', 'weekend', 'spaux', 'ScrAm`', 'e3cb', 'wall', 'centip3de']
-channel = "#bots"
-sock = socket.socket()
-server = "irc.hackthissite.org"
-verified = [] 
-port = 6667 
+class Bot():
+    def __init__(self):
+        self.bot_owner      = "centip3de"
+        self.nickname       = "centip3de_away"
+        self.personNick     = ""
+        self.authorized     = ['mShred', 'Kage', 'limdis', 'LoGiCaL__', 'fas', 'NightQuest', 'weekend', 'spaux', 'case', 'apples', 'e3cb', 'wall', 'centip3de']
+        self.channel        = "#bots"
+        self.sock           = socket.socket()
+        self.server         = "irc.hackthissite.org"
+        self.verified       = [] 
+        self.port           = 6667 
+        self.initial_ping    = True 
 
-def sendEmail(text):
-    infoFp = open("Info.txt", "r")
-    sender = infoFp.readline().rstrip('\n')
-    password = infoFp.readline().rstrip('\n')
-    username = infoFp.readline().rstrip('\n')
-    
-    SMTPserver = "smtp.gmail.com"
-    destination = sender
-    text_subtype = "plain"
+    def start(self):
+        self.sock.connect((self.server, self.port))
+        self.send("USER " + self.nickname + " USING CUSTOM BOT")
+        self.send("NICK " + self.nickname)
+        
+        while 1:
+            data = self.sock.recv(512).decode('UTF-8')
+            lines = data.split("\r\n")
+            self.personNick = self.getName(data)
 
-    if text == "":
-        print "You must supply valid text!"
-        return
-    else:
-        content = text
 
-    msg = MIMEText(content)
-    msg['Subject'] = "IRC ALERT"
-    msg['From'] = sender
+            for line in lines:
+                print(line) 
 
-    conn = SMTP(SMTPserver)
-    conn.set_debuglevel(False)
-    conn.login(username, password)
-    conn.sendmail(sender, destination, msg.as_string())
-    conn.close()
+            if(data[0:4] == "PING"):
+                self.send(data.replace("PING", "PONG"))
 
-def getName(data):
-    colonIndex = data.find(":")
-    colonIndex += 1
-    exmarkIndex = data.find("!")
-    name = data[colonIndex:exmarkIndex]
-    return name
+                if(self.initial_ping):
+                    self.send("MODE " + self.nickname + "+B")
+                    self.send("JOIN " + self.channel)
 
-def isAuthorized():
-    return personNick in authorized
+            elif(re.search("PRIVMSG " + self.nickname + " :help", data)):
+                self.sendToPerson("This is centip3de's AFK bot. If you need to leave him a message, just send it to me and I'll log it for him.")
 
-def sendToPerson(msg):
-    sock.send("PRIVMSG " + personNick + " :" + msg + "\r\n")
+            elif(re.search("PRIVMSG " + self.nickname + " :verify", data)):
+                verifyIndex = data.find(":verify")
+                verifyIndex += 8
+                verifyData = data[verifyIndex:].rstrip('\n')
+                self.verify(verifyData, self.getName(data))
 
-def sendToChan(msg):
-    sock.send("PRIVMSG " + channel + " :" + msg + "\r\n")
+            elif(re.search("PRIVMSG " + self.nickname + " :exit", data)):
+                self.runVerifiedCommand(exit) 
 
-def send(msg):
-    sock.send(msg + "\r\n")
+            elif(re.search("PRIVMSG " + self.nickname + " :", data)):
+                logFile = open("log.txt", "a")
+                logFile.write(data)
 
-def isVerified(personNick):
-    return personNick in verified
-
-def verify(data, name):
-    verifiyFp = open("pass.txt", "r")
-    password = verifiyFp.readline().rstrip('\n')
-    if(re.search(password, data)):
-        print "Verified!"
-        verified.append(name)
-    else:
-        print "Not verified!"
-    
-sock.connect((server, port))
-send("USER " + nickname + " USING CUSTOM BOT")
-send("NICK " + nickname)
-
-while 1:
-    data = sock.recv(512)
-    print data
-    if data[0:4] == "PING":
-        send(data.replace("PING", "PONG"))
-        send("MODE " + nickname + "+B")
-        send("JOIN " + channel)
-    elif re.search("PRIVMSG " + nickname + " :help", data):
-        personNick = getName(data)
-        sendToPerson("This is centip3de's AFK bot. If you need to leave him a message, just send it to me and I'll log it for him.")
-        if isAuthorized():
-            sendToPerson("If you really need to get in contact with him, you may use the 'alert' command to message him directly.")
-            sendToPerson("The syntax for the command is: 'alert messageHere'.")
-            sendToPerson("Remember, this is a direct line to him. Please do not use this unless absolutely necessary.")
-    elif re.search("PRIVMSG " + nickname + " :alert", data):
-        personNick = getName(data)
-        if isAuthorized():
-            sendEmail(data)
+    def runVerifiedCommand(self, command):
+        if(self.isVerified()):
+            command()
         else:
-            sendToPerson("I'm sorry " + personNick + ", you must be authorized to complete this action.")
-    elif re.search("PRIVMSG " + nickname + " :verify", data):
-        verifyIndex = data.find(":verify")
-        verifyIndex += 8
-        verifyData = data[verifyIndex:].rstrip('\n')
-        verify(verifyData, getName(data))
-    elif re.search("PRIVMSG " + nickname + " :exit", data) and isVerified(getName(data)):
-        print "HERE"
-        exit()
-    elif re.search("PRIVMSG " + nickname + " :", data):
-        logFile = open("log.txt", "a")
-        logFile.write(data)
+            self.sendToPerson("I'm sorry" + self.personNick + ", you must be verified to complete this action.") 
+
+    def runAuthorizedCommand(self, command):
+        if(self.isAuthorized()):
+            command()
+        else:
+            self.sendToPerson("I'm sorry" + self.personNick + ", you must be authorized to complete this action.")
+
+    def getName(self, data):
+        colonIndex = data.find(":")
+        colonIndex += 1
+        exmarkIndex = data.find("!")
+        name = data[colonIndex:exmarkIndex]
+        return name
+
+    def isAuthorized(self):
+        return self.personNick in self.authorized
+
+    def sendToPerson(self, msg):
+        #print("MSG: ", msg)
+        self.sock.send(bytes("PRIVMSG " + self.personNick + " :" + msg + "\r\n", 'UTF-8'))
+
+    def sendToChan(self, msg):
+        self.sock.send(bytes("PRIVMSG " + self.channel + " :" + msg + "\r\n", 'UTF-8'))
+
+    def send(self, msg):
+        self.sock.send(bytes(msg + "\n", 'UTF-8'))
+
+    def isVerified(self):
+        return self.personNick in self.verified
+
+    def verify(self, data, name):
+        verifiyFp = open("pass.txt", "r")
+        password = verifiyFp.readline().rstrip('\n')
+        if(re.search(password, data)):
+            self.sendToPerson("Verified!")
+            self.verified.append(name)
+        else:
+            self.sendToPerson("Incorrect password for verification.")
+
+def main():
+    bot = Bot()
+    bot.start()
+
+if __name__ == "__main__":
+    main()
