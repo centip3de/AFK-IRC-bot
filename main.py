@@ -3,19 +3,32 @@ import re
 import os
 from smtplib import SMTP_SSL as SMTP
 from email.mime.text import MIMEText
+from Parser import Parser
 
 class Bot():
     def __init__(self):
-        self.bot_owner      = "centip3de"
-        self.nickname       = "centip3de_away"
+        self.bot_owner      = ""
+        self.nickname       = ""
         self.personNick     = ""
         self.authorized     = ['mShred', 'Kage', 'limdis', 'LoGiCaL__', 'fas', 'NightQuest', 'weekend', 'spaux', 'case', 'apples', 'e3cb', 'wall', 'centip3de']
-        self.channel        = "#bots"
+        self.channel        = ""
         self.sock           = socket.socket()
-        self.server         = "irc.hackthissite.org"
+        self.server         = ""
         self.verified       = [] 
-        self.port           = 6667 
-        self.initial_ping    = True 
+        self.port           = 0
+        self.initial_ping   = True 
+
+        self.setVariables()
+
+    def setVariables(self):
+        parser          = Parser("bot.config")
+        tokens          = parser.parse()
+
+        self.bot_owner  = tokens["bot_owner"]
+        self.nickname   = tokens["nickname"]
+        self.channel    = tokens["channel"]
+        self.server     = tokens["server"]
+        self.port       = int(tokens["port"])
 
     def start(self):
         self.sock.connect((self.server, self.port))
@@ -26,7 +39,6 @@ class Bot():
             data = self.sock.recv(512).decode('UTF-8')
             lines = data.split("\r\n")
             self.personNick = self.getName(data)
-
 
             for line in lines:
                 print(line) 
